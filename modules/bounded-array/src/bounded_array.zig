@@ -65,6 +65,9 @@ pub fn BoundedArrayAligned(
 
         /// Adjust the slice's length to `len`.
         /// Does not initialize added items if any.
+        ///
+        /// Note: `resize(self.len + n)` may overflow in ReleaseFast/ReleaseSmall.
+        /// Prefer `ensure_unused_capacity(n)` + `self.len += n` for relative resizing.
         pub fn resize(self: *Self, len: usize) error{Overflow}!void {
             if (len > buffer_capacity) return error.Overflow;
             self.len = len;
@@ -99,7 +102,7 @@ pub fn BoundedArrayAligned(
 
         /// Check that the slice can hold at least `additional_count` items.
         pub fn ensure_unused_capacity(self: Self, additional_count: usize) error{Overflow}!void {
-            if (self.len + additional_count > buffer_capacity) {
+            if (additional_count > buffer_capacity - self.len) {
                 return error.Overflow;
             }
         }
@@ -122,7 +125,8 @@ pub fn BoundedArrayAligned(
         /// The return value is a pointer to the array of uninitialized elements.
         pub fn add_many_as_array(self: *Self, comptime n: usize) error{Overflow}!*align(alignment) [n]T {
             const prev_len = self.len;
-            try self.resize(self.len + n);
+            try self.ensure_unused_capacity(n);
+            self.len += n;
             return self.slice()[prev_len..][0..n];
         }
 
@@ -130,7 +134,8 @@ pub fn BoundedArrayAligned(
         /// The return value is a slice pointing to the uninitialized elements.
         pub fn add_many_as_slice(self: *Self, n: usize) error{Overflow}![]align(alignment) T {
             const prev_len = self.len;
-            try self.resize(self.len + n);
+            try self.ensure_unused_capacity(n);
+            self.len += n;
             return self.slice()[prev_len..][0..n];
         }
 
@@ -169,6 +174,7 @@ pub fn BoundedArrayAligned(
         /// Insert slice `items` at index `i` by moving `slice[i .. slice.len]` to make room.
         /// This operation is O(N).
         pub fn insert_slice(self: *Self, i: usize, items: []const T) error{Overflow}!void {
+            if (i > self.len) return error.Overflow;
             try self.ensure_unused_capacity(items.len);
             self.len += items.len;
             mem.copyBackwards(T, self.slice()[i + items.len .. self.len], self.const_slice()[i .. self.len - items.len]);
@@ -184,6 +190,7 @@ pub fn BoundedArrayAligned(
             len: usize,
             new_items: []const T,
         ) error{Overflow}!void {
+            if (start > self.len or len > self.len - start) return error.Overflow;
             const after_range = start + len;
             var range = self.slice()[start..after_range];
 
@@ -219,9 +226,10 @@ pub fn BoundedArrayAligned(
 
         /// Remove the element at index `i`, shift elements after index
         /// `i` forward, and return the removed element.
-        /// Asserts the slice has at least one item.
+        /// Returns `error.Overflow` if the slice is empty.
         /// This operation is O(N).
-        pub fn ordered_remove(self: *Self, i: usize) T {
+        pub fn ordered_remove(self: *Self, i: usize) error{Overflow}!T {
+            if (self.len == 0) return error.Overflow;
             const newlen = self.len - 1;
             if (newlen == i) return self.pop().?;
             const old_item = self.get(i);
@@ -233,8 +241,10 @@ pub fn BoundedArrayAligned(
 
         /// Remove the element at the specified index and return it.
         /// The empty slot is filled from the end of the slice.
+        /// Returns `error.Overflow` if the slice is empty.
         /// This operation is O(1).
-        pub fn swap_remove(self: *Self, i: usize) T {
+        pub fn swap_remove(self: *Self, i: usize) error{Overflow}!T {
+            if (self.len == 0) return error.Overflow;
             if (self.len - 1 == i) return self.pop().?;
             const old_item = self.get(i);
             self.set(i, self.pop().?);
@@ -259,7 +269,8 @@ pub fn BoundedArrayAligned(
         /// Allocates more memory as necessary.
         pub fn append_n_times(self: *Self, value: T, n: usize) error{Overflow}!void {
             const old_len = self.len;
-            try self.resize(old_len + n);
+            try self.ensure_unused_capacity(n);
+            self.len += n;
             @memset(self.slice()[old_len..self.len], value);
         }
 
@@ -403,13 +414,13 @@ test BoundedArray {
     try testing.expectEqual(a.pop(), 10);
 
     try a.append(20);
-    const removed = a.ordered_remove(5);
+    const removed = try a.ordered_remove(5);
     try testing.expectEqual(removed, 1);
     try testing.expectEqual(a.len, 34);
 
     a.set(0, 0xdd);
     a.set(a.len - 1, 0xee);
-    const swapped = a.swap_remove(0);
+    const swapped = try a.swap_remove(0);
     try testing.expectEqual(swapped, 0xdd);
     try testing.expectEqual(a.get(0), 0xee);
 
@@ -435,4 +446,72 @@ test "BoundedArrayAligned" {
     const b = @as(*const [2]u16, @ptrCast(a.const_slice().ptr));
     try testing.expectEqual(@as(u16, 0), b[0]);
     try testing.expectEqual(@as(u16, 65535), b[1]);
+}
+
+// --- Boundary condition tests ---
+
+test "insert_slice rejects out-of-bounds index" {
+    var a = try BoundedArray(u8, 10).init(5);
+    try testing.expectError(error.Overflow, a.insert_slice(10, &.{ 1, 2 }));
+    try testing.expectError(error.Overflow, a.insert_slice(6, &.{1}));
+    // i == self.len is valid
+    try a.insert_slice(5, &.{1});
+    try testing.expectEqual(a.len, 6);
+}
+
+test "replace_range rejects out-of-bounds range" {
+    var a = try BoundedArray(u8, 10).init(5);
+    try testing.expectError(error.Overflow, a.replace_range(10, 1, &.{1}));
+    try testing.expectError(error.Overflow, a.replace_range(4, 2, &.{1}));
+    try a.replace_range(2, 2, &.{ 9, 9 });
+    try testing.expectEqual(a.len, 5);
+}
+
+test "ensure_unused_capacity rejects overflowing additional_count" {
+    var a = try BoundedArray(u8, 10).init(5);
+    try testing.expectError(error.Overflow, a.ensure_unused_capacity(std.math.maxInt(usize)));
+}
+
+test "add_many_as_slice rejects overflowing n" {
+    var a = try BoundedArray(u8, 10).init(5);
+    try testing.expectError(error.Overflow, a.add_many_as_slice(std.math.maxInt(usize)));
+}
+
+test "append_n_times rejects overflowing n" {
+    var a = try BoundedArray(u8, 10).init(5);
+    try testing.expectError(error.Overflow, a.append_n_times(0, std.math.maxInt(usize)));
+}
+
+test "ordered_remove on empty slice" {
+    var a = try BoundedArray(u8, 10).init(0);
+    try testing.expectError(error.Overflow, a.ordered_remove(0));
+    try a.resize(3);
+    a.set(0, 10);
+    a.set(1, 20);
+    a.set(2, 30);
+    const removed = try a.ordered_remove(1);
+    try testing.expectEqual(removed, 20);
+    try testing.expectEqual(a.len, 2);
+}
+
+test "swap_remove on empty slice" {
+    var a = try BoundedArray(u8, 10).init(0);
+    try testing.expectError(error.Overflow, a.swap_remove(0));
+    try a.resize(3);
+    a.set(0, 10);
+    a.set(1, 20);
+    a.set(2, 30);
+    const removed = try a.swap_remove(0);
+    try testing.expectEqual(removed, 10);
+    try testing.expectEqual(a.len, 2);
+}
+
+test "add_many_as_array still works" {
+    var a = try BoundedArray(u8, 10).init(0);
+    const ptr = try a.add_many_as_array(3);
+    ptr.* = .{ 1, 2, 3 };
+    try testing.expectEqual(a.len, 3);
+    try testing.expectEqual(a.get(0), 1);
+    try testing.expectEqual(a.get(1), 2);
+    try testing.expectEqual(a.get(2), 3);
 }
