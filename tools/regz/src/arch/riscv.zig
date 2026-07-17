@@ -4,7 +4,6 @@ const assert = std.debug.assert;
 
 const Database = @import("../Database.zig");
 const Arch = Database.Arch;
-const EntityId = Database.EntityId;
 
 const gen = @import("../gen.zig");
 
