@@ -207,42 +207,42 @@ pub fn HD44780(comptime config: HD44780_Config) type {
 
         pub fn shift_control(lcd: *Self, st: State) !void {
             switch (st) {
-                .on => lcd.entryMode |= EntryMode.shift_mode,
-                .off => lcd.entryMode &= ~EntryMode.shift_mode,
+                .on => lcd.entry_mode |= @intFromEnum(EntryMode.shift_mode),
+                .off => lcd.entry_mode &= ~@intFromEnum(EntryMode.shift_mode),
             }
-            try lcd.send(lcd.entryMode, 0);
+            try lcd.send(lcd.entry_mode, 0);
         }
 
         pub fn shift_mode(lcd: *Self, mode: ShiftDirection) !void {
             switch (mode) {
-                .inc => lcd.entryMode |= EntryMode.shift_dir,
-                .dec => lcd.entryMode &= ~EntryMode.shift_dir,
+                .inc => lcd.entry_mode |= @intFromEnum(EntryMode.shift_dir),
+                .dec => lcd.entry_mode &= ~@intFromEnum(EntryMode.shift_dir),
             }
-            try lcd.send(lcd.entryMode, 0);
+            try lcd.send(lcd.entry_mode, 0);
         }
 
         pub fn display_set(lcd: *Self, st: State) !void {
             switch (st) {
-                .on => lcd.displayControl |= DisplayControl.display,
-                .off => lcd.displayControl &= ~DisplayControl.display,
+                .on => lcd.display_control |= @intFromEnum(DisplayControl.display),
+                .off => lcd.display_control &= ~@intFromEnum(DisplayControl.display),
             }
-            try lcd.send(lcd.displayControl, 0);
+            try lcd.send(lcd.display_control, 0);
         }
 
         pub fn cursor_control(lcd: *Self, st: State) !void {
             switch (st) {
-                .on => lcd.displayControl |= DisplayControl.cursor,
-                .off => lcd.displayControl &= ~DisplayControl.cursor,
+                .on => lcd.display_control |= @intFromEnum(DisplayControl.cursor),
+                .off => lcd.display_control &= ~@intFromEnum(DisplayControl.cursor),
             }
-            try lcd.send(lcd.displayControl, 0);
+            try lcd.send(lcd.display_control, 0);
         }
 
         pub fn cursor_blink_control(lcd: *Self, st: State) !void {
             switch (st) {
-                .on => lcd.displayControl |= DisplayControl.blink,
-                .off => lcd.displayControl &= ~DisplayControl.blink,
+                .on => lcd.display_control |= @intFromEnum(DisplayControl.blink),
+                .off => lcd.display_control &= ~@intFromEnum(DisplayControl.blink),
             }
-            try lcd.send(lcd.displayControl, 0);
+            try lcd.send(lcd.display_control, 0);
         }
 
         pub fn select_lcd(lcd: *Self, en: EnableSet) !void {

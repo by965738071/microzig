@@ -345,7 +345,11 @@ pub fn Stepper(comptime Driver: type) type {
         pub fn start_brake(self: *Self) void {
             switch (self.get_current_state()) {
                 .cruising => self.steps_remaining = self.steps_to_brake,
-                .accelerating => self.steps_remaining = self.step_count * self.profile.accel / self.profile.decel,
+                .accelerating => switch (self.profile) {
+                    .linear_speed => |p| self.steps_remaining =
+                        self.step_count * @as(u32, p.accel) / @as(u32, p.decel),
+                    .constant_speed => self.steps_remaining = self.steps_to_brake,
+                },
                 else => {}, // Do nothing, already decelerating or stopped.
             }
         }

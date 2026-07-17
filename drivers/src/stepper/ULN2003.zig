@@ -184,7 +184,7 @@ pub const ULN2003 = struct {
         }
     }
 
-    pub fn stop(self: *Self) void {
+    pub fn stop(self: *Self) u32 {
         const rv = self.steps_remaining;
         self.steps_remaining = 0;
         return rv;

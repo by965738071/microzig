@@ -153,7 +153,7 @@ pub const AS5600 = struct {
     }
 
     pub fn read_raw_angle(self: *const Self) !f32 {
-        const angle = (try self.read2_raw(register.ANGLE)) & 0xFFF;
+        const angle = (try self.read2_raw(register.RAW_ANGLE)) & 0xFFF;
         return @as(f32, @floatFromInt(angle)) * 360 / 4096;
     }
 

@@ -66,14 +66,16 @@ pub const TestDevice = struct {
     pub fn enable_write(ctx: *anyopaque) BaseError!void {
         const td: *TestDevice = @ptrCast(@alignCast(ctx));
         std.debug.print("Enable flash Write\n", .{});
-        td.read_enabled = true;
         td.write_enabled = true;
     }
     pub fn disable_write(ctx: *anyopaque) BaseError!void {
         const td: *TestDevice = @ptrCast(@alignCast(ctx));
         std.debug.print("Disable flash Write\n", .{});
-        td.read_enabled = false;
         td.write_enabled = false;
+    }
+    pub fn enable_read(ctx: *anyopaque) BaseError!void {
+        const td: *TestDevice = @ptrCast(@alignCast(ctx));
+        td.read_enabled = true;
     }
     pub fn erase(ctx: *anyopaque, sector: u32) WriteError!void {
         const td: *TestDevice = @ptrCast(@alignCast(ctx));
@@ -94,7 +96,7 @@ pub const TestDevice = struct {
     }
     pub fn read(ctx: *anyopaque, offset: u32, data: []u8) ReadError!usize {
         const td: *TestDevice = @ptrCast(@alignCast(ctx));
-        if (td.write_enabled) {
+        if (td.read_enabled) {
             std.debug.print("Reading offset: {}\n", .{offset});
             const length = data.len;
             for (0..length) |i| {
@@ -138,6 +140,7 @@ test TestDevice {
     try std.testing.expectError(error.ReadDisabled, fd.read(0, buffer[0..]));
 
     try fd.enable_write();
+    try td.enable_read();
 
     try fd.write(0, buffer[0..]);
     try std.testing.expectEqual(buffer.len, fd.read(0x123, buffer[0..]));

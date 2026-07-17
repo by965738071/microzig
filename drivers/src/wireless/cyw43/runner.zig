@@ -225,7 +225,7 @@ pub const CYW43_Runner = struct {
 
     /// Run one poll cycle. Returns true if there was activity.
     /// Received data frames are buffered and can be retrieved via get_rx_frame().
-    pub fn run(self: *Self) bool {
+    pub fn run(self: *Self) !bool {
         // Clear previous frame
         self.has_rx_frame = false;
 
